@@ -1,0 +1,1191 @@
+---
+title: "Econometría 2 - Taller 1"
+author: "Luis Ángel Mazabuel García y Nicolás Felipe Ortiz Rodriguez"
+date: "17/5/2020"
+header-includes: |
+  \usepackage{dcolumn}
+  \usepackage{float}
+  \floatplacement{figure}{H}
+output:
+  pdf_document: 
+    toc: true
+    toc_depth: 3
+    latex_engine: xelatex
+---
+
+```{r global_options, setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(fig.pos = "H")
+knitr::opts_chunk$set(results = 'asis')
+knitr::opts_chunk$set(comment = "")
+knitr::opts_chunk$set(fig.align = "c")
+knitr::opts_chunk$set(tidy = TRUE)
+
+# Por favor, para visualizar los datos seleccione para la primera parte la base de datos del grupo No. 21 y para la segunda parte la base de datos del coronavirus en su ordenador.##############################
+```
+\pagebreak
+
+## PRIMERA PARTE: Datos asignados, grupo número 21.
+
+
+
+### **1) Elabore un análisis descriptivo de los datos:**
+```{r, message=FALSE}
+library(tinytex)
+library(tidyverse)
+library(haven)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(readxl)
+library(maps)
+library(PerformanceAnalytics)
+library(knitr)
+library(kableExtra)
+library(xtable)
+library(moments)
+library(plm)
+library(gplots)
+library(stargazer)
+library(sandwich)
+library(lmtest)
+library(tseries)
+library(car)
+library(strucchange)
+library(corrplot)
+
+library(odbc)
+library(DBI)
+con <- dbConnect(odbc(), "Luis")
+
+BD <- read.csv("DatosGrupo21.csv")
+```
+
+  ¿Cuantos individuos y periodos de tiempo hay en los 1500 datos de nuestra muestra?
+
+```{r}
+cat("Cantidad de individuos muestreados:",length(unique(BD$id)),"\nCantidad de fechas muestreadas: ", length(unique(BD$t)))
+```
+
+
+
+  ¿Hay Valores faltantes o registros duplicados en los datos?
+
+```{r}
+cat("  ",sum(is.na(BD)), "= No hay valores faltantes (na).\n  ",
+    sum(duplicated(BD)), "= No hay valores duplicados.")
+```
+
+
+
+- **Histograma**
+
+```{r, fig.width=12, fig.height=3}
+ggplot(data = BD, mapping = aes(x = Y))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Y)), color="white", linetype="dashed", size=1) -> h0
+ggplot(data = BD, mapping = aes(x = X1))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(X1)), color="white", linetype="dashed", size=1) -> h1
+
+ggplot(data = BD, mapping = aes(x = X2))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(X2)), color="white", linetype="dashed", size=1) -> h2
+
+ggplot(data = BD, mapping = aes(x = X3))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(X3)), color="white", linetype="dashed", size=1) -> h3
+grid.arrange(h0,h1, h2, h3, ncol=4,
+     top = textGrob("Histograma de cada variable",gp=gpar(fontsize=20,font=3)))
+```
+
+Como se puede notar en los histogramas presentados, las cuatro variables, a simple vista, presentan una distribución de frecuencia bastante similar y en donde cada una de ellas asemeja una distribución normal y cuasi simétrica.
+
+- **Estadística Descriptiva**
+
+  Valores mínimos, máximos, rango intercuartil, mediana y media aritmética de las variables.
+
+```{r}
+BD %>%
+  summarise_at(c("Y","X1", "X2", "X3"), list(min=min,
+                                             media=mean,
+                                             mediana=median,
+                                             max=max,
+                                             rango_int_cuartil=IQR)) -> a
+
+data <- as.data.frame(matrix(round(a,3),4))
+rownames(data) <- c("Y","X1", "X2", "X3")
+names(data) <- c("Mínimo", "Media", "Mediana", "Máximo","Rango Inter Cuartil")
+kable(data, align = "c", caption = "Medidas Representativas", format = "latex")%>%
+kable_styling(latex_options = "hold_position") 
+```
+
+
+
+  + Representación gráfica de las anteriores medidas:
+
+
+
+```{r, fig.width=10, fig.height=3}
+ggplot(data = BD)+
+  geom_boxplot(mapping = aes(x = Y), outlier.colour = "red", fill = "lightblue")+
+  coord_flip() -> b0
+ggplot(data = BD)+
+  geom_boxplot(mapping = aes(x = X1), outlier.colour = "red", fill = "lightblue")+
+  coord_flip() -> b1
+ggplot(data = BD)+
+  geom_boxplot(mapping = aes(x = X2), outlier.colour = "red", fill = "lightblue")+
+  coord_flip() -> b2
+ggplot(data = BD)+
+  geom_boxplot(mapping = aes(x = X3), outlier.colour = "red", fill = "lightblue")+
+  coord_flip() -> b3
+grid.arrange(b0,b1, b2, b3, ncol=4,
+     top = textGrob("Box-Plot de cada variable",gp=gpar(fontsize=20,font=3)))
+```
+
+  Es posible observar también en las gráficas de caja o “boxplot” para Y, X1, X2 y X3 que las distancias entre Q1-Q2 y Q2-Q3 son para los 4 casos, casi iguales, simétricas y que las cuatro poseen una distribución o dispersión bastante similar. También es posible concluir que, a excepción de X3, existen datos atípicos en la zona inferior y superior para X1 y X2 y únicamente en la zona superior para Y.
+
+
+
+  + Los cuatro momentos estadísticos (Media, Varianza, Asimetría y Curtosis):
+
+```{r, warning=FALSE}
+BD%>%
+  summarise_at(c("Y","X1", "X2", "X3"), list(media=mean, 
+                                          sd=sd, 
+                                          asimetria=skewness, 
+                                          curtosis=kurtosis)) -> a
+
+data <- as.data.frame(matrix(round(a,3),4))
+rownames(data) <- c("Y","X1", "X2", "X3")
+names(data) <- c("Media", "Varianza", "Asimetria", "Curtosis")
+kable(data, align = "c", caption = "Momentos estadísticos", format = "latex")%>%
+kable_styling(latex_options = "hold_position")
+```
+
+  + **Y**
+  
+  Como puede ser observado en los resultados, la curtosis en Y es 2.91620200746014, con lo cual podría decirse que posee una distribución platicúrtica dado que es <3, fácilmente podría decirse que su distribución posee una concentración normal, pues sus valores se acercan a 3, con lo cual se hablaría de una distribución mesocúrtica.
+  
+  + **X1**
+  
+  En cuanto a X1, la curtosis es 2.9825740252592, luego es factible afirmar que aunque posee una concentración muy cercana a una normal (3). Luego su forma de distribución es platicúrtica y cuasi mesocúrtica. Además de esto, observamos que su media es muy cercana a cero (0) y su varianza es muy cercana a uno (1), señales de que su distribución es muy semejante a una Normal Estándar.
+  
+  + **X2**  
+  
+  Al igual que en la anterior variable, para X2, la distribución es platicúrtica y se acerca mucho a tener una distribución normal mesocúrtica ya que el valor de su curtosis es de 2.96594510002024. Así mismo su media y su varianza la asemejan a una distribución Normal Estándar.
+  
+  + **X3**
+  
+  Por último, tenemos que X3 posee una menor distribución de sus datos en torno a su media en comparación con las demás variables estudiadas, a saber, su curtosis es de 2.63019269806822, lo cual corresponde a una forma platicúrtica. Sin embargo, su media y su varianza son, de nuevo, semejantes a las de una distribución Normal Estándar.
+  
+  + **Asimetría**
+  Por otro lado, mediante la Tabla 2., es posible respaldar que nnuestras variables Y, X1, X2 y X3 poseen una dispersión casi simétrica. Pues su asimetría es 0.19, -0.076, 0.03 y 0.188 respectivamente con valores muy cercanos al 0.
+  
+  Con estos resultados, teniendo en cuenta más que todo las tres variables explicativas, se podría asegurar la distribución Normal Estándar para la variable dependiente Y. Dado que en la estimación del siguiente modelo:
+  
+  $Y_{it}=\beta_{0}+\beta_1X_{1it}+\beta_2X_{2it}+\beta_3X_{3it}+u_{it}$
+
+  Se cumple lo que menciona Damodar N. Gujarati en su  libro _"Econometrics":_ "cualquier funcion lineal de variables normalmente distribuidas estará también normalmente distribuida" (p. 99). Sin embargo, los análisis de normalidad en las variables los realizaremos en breve.
+
+### **2) Estimación del modelo bajo el método de Mínimos Cuadrados Combinados (Pooling):**
+
+- **Estimación del modelo:**
+
+  Para realizar la estimación de los Datos de tipo longitudinal o Panel, el cual es un Panel de tipo _Corto_ en este caso; pues, como se mencionó inicialmente tenemos 300 individuos y 5 periodos de tiempo muestreados. Así, bajo el método de Mínimos Cuadrados Combinados (**MCOC**) tenemos la siguiente ecuación:
+
+  $Y_{it}=\beta_{0}+\beta_1X_{1it}+\beta_2X_{2it}+\beta_3X_{3it}+u_{it}$
+
+```{r, message=FALSE, warning=FALSE}
+df = pdata.frame(BD, index = c("id", "t"))
+pooled <- plm(Y~X1+X2+X3, index = c("id", "t"), model = "pooling", data = df)
+stargazer(pooled,type="latex", title = "Mínimos Cuadrados Combinados (Pooled)",
+          align = TRUE,
+          font.size = "small",
+          omit.table.layout = "#n",
+          header = FALSE,
+          keep.stat=c("n","rsq","f"),
+          table.placement = "H")
+```
+
+  Como puede ser evidenciado en la **_Tabla 3: Mínimos Cuadrados Combinados (Pooled)_**, todos los coeficientes del modelo son estadísticamente significativos bajo un alpha del 1% ($\alpha=0.01$). Según el coeficiente de determinación $R^2$, el modelo se ajusta muy bien a las variables consideradas, pues posee un valor del 89%. Finalmente, los errores estándar son bajos en relación a la magnitud de los coeficientes estimados.
+
+### **3) Inclusión de efectos individuales y efectos temporales al modelo anterior:**
+
+- **Comparación del modelo bajo el método "Pooled" cuando se incluyen efectos fijos vs efectos individuales.**
+
+  A nuestro anterior modelo, podemos añadirle con fines investigativos el tiempo o los individuos como coeficientes por estimar con el fin de observar si hay efectos inobservables que varien por individuo o en el tiempo. Si llega a encontrarse la presencia de dichos efectos el modelo sufrirá del llamado sesgo por variable omitida. A continuación se presentan ambas estimaciones y luego se realizan las respectivas pruebas de hipótesis.
+
+```{r}
+#Estimación del modelo bajo Mínimos Cuadrados Ordinarios Combinados con la variable "t" (momento temporal del muestreo) como variable duumy:
+pooled_t = plm(Y~X1+X2+X3+as.factor(t), index = c("id","t"),model = "pooling", data = df)
+
+#Estimación del modelo bajo Mínimos Cuadrados Ordinarios Combinados con la variable "id" (individuos de la muestra) como variable duumy:
+pooled_id = plm(Y~X1+X2+X3+as.factor(id), index = c("id","t"),model = "pooling", data = df)
+
+stargazer(pooled_t,pooled_id,type="latex", title = "Mínimos Cuadrados Combinados (Pooled)",
+          align = TRUE,column.labels=c("Efectos Temporales", "Efectos Individuales"),
+          omit = 5:305,
+          header = FALSE,
+          keep.stat=c("n","rsq","f"),
+          font.size = "small",
+          omit.table.layout = "#n",
+          table.placement = "H")
+```
+
+  ¿Es significativa la presencia de Efectos Individuales, Efectos Temporales o ambos?
+  
+  Para las siguientes tres pruebas bajo el **Test de Multiplicadores de Lagrange** las hipótesis a contrastar son:
+  
+  $H_0: Efecto~evaluado~no~significativo~en~el~modelo$
+  
+  $H_1: Efecto~evaluado~significativo~en~el~modelo$
+  
+  + **Prueba para presencia de Efectos Temporales**
+
+```{r results='hold'}
+alpha = 0.05
+plmtest(pooled,"time","bp") -> pooltime        #Ho:Efectos temporales no significativos 
+pooltime
+#r1 = if(pooltime$p.value < alpha){
+#  cat("Rechazo de la Hipótesis Nula.")
+#}else{
+#  cat("No rechazo de la Hipótesis Nula.")
+#}
+```
+
+  Se concluye que el modelo sufre de endogeneidad entre alguna(s) de la(s) variable(s) explicativa(s) y el error ideosincrático o temporal el cual está comprendido dentro del término de error compuesto $u_{it}$.
+
+  + **Prueba para presencia de Efectos Individuales**
+
+```{r results='hold'}
+plmtest(pooled,"individual","bp") -> poolid     #Ho:Efectos indivuduales no significativos
+poolid
+#r2 = if(poolid$p.value < alpha){
+#  cat("Rechazo de la Hipótesis Nula.")
+#}else{
+#  cat("No rechazo de la Hipótesis Nula.")
+#}
+```
+
+  Se concluye que el modelo sufre de endogeneidad entre alguna(s) de la(s) variable(s) explicativa(s) y el efecto fijo $\alpha_i$ el cual está comprendido dentro del término de error compuesto $u_{it}$.
+
+  + **Prueba para presencia de Ambos Efectos**
+
+```{r results='hold'}
+plmtest(pooled,"twoways","bp") -> poolboth      #H0:Ambos efectos no significativos
+poolboth
+#r3 = if(poolboth$p.value < alpha){
+#  cat("Rechazo de la Hipótesis Nula.")
+#}else{
+#  cat("No rechazo de la Hipótesis Nula.")
+#}
+```
+
+  En concordancia con las anteriores dos pruebas, esta última prueba nos confirma que el modelo sufre de endogeneidad entre sus variables explicativas y el término de error compuesto.
+
+  Dada la **_Tabla 4: Mínimos Cuadrados Combinados (Pooled)_** y teniendo en cuenta los resultados de la prueba del multiplicador de Lagrange, las estimaciones cambian significativamente tanto para Efectos Individuales como para Efectos Temporales,  pues en ambos casos al ser el  p-valor menor o igual  al nivel de significancia $\alpha=0.05$ correspondiente, se rechaza la hipótesis nula.
+
+### **4) Estimación bajo el modelo de Primeras Diferencias (FD):**
+
+  Para eliminar dichos efectos inobservados en el método de estimación de Datos Panel se puede realizar dicha estimación bajo el modelo de Primeras Diferencias, el cual se expresa de la siguiente manera:
+
+  $y_{it}−y_{it−1}=\beta_0+\beta_1(x_{it1}−x_{i(t−1)1})+\beta_2(x_{it2}−x_{i(t−1)2})+\beta_3(x_{it3}−x_{i(t−1)3})+(u_{it}−u_{it−1})$
+
+```{r}
+FD = plm(Y~X1+X2+X3, index = c("id", "t"), model = "fd", data = df)
+stargazer(FD,type="latex", title = "Primeras Diferencias", align = TRUE,
+          keep.stat=c("n","rsq","f"),
+          header = FALSE,
+          font.size = "small",
+          omit.table.layout = "#n",
+          table.placement = "H")
+```
+
+  Partiendo de la **_Tabla 5: Primeras Diferencias_**, se obtiene que: en la eliminación de efectos inobservables bajo el modelo de Primeras Diferencias, los coeficientes estimados son significativos al 1%, a excepción del intercepto $\beta_0$. La bondad de ajuste no cambia en relación a la estimación hecha por MCO Combinados (pooling) y los errores estándar no cambian mucho pese a la reducción del tamaño de la muestra. Además, es importante notar que los signos de los coeficientes no cambian. Por otro lado, el cambio en los coeficientes estimados no sorprenden si se tiene en cuenta que los estimadores de Efectos Fijos y de Primeras Diferencias se acercan más cuanto más pequeña es la dimensión temporal de la muestra.
+
+### **5) Estimación del modelo bajo los métodos de Efectos Fijos (Within) y Variables Binarias (VB):**
+
+  Otra manera para eliminar dichos efectos inobservados en el método de estimación de Datos Panel se puede realizar bajo el modelo de Efectos Fijos y su variante de Variables Binarias, los cuales se expresan de la siguiente manera:
+  
+  + Efectos Fijos:
+
+  $y_{it}−\overline{y}_{i}=\beta_0+\beta_1(x_{it1}−\overline{x}_{i1})+\beta_2(x_{it2}−\overline{x}_{i2})+\beta_3(x_{it3}−\overline{x}_{i3})+(u_{it}−\overline{u}_{i})$
+  
+  + Variables Binarias:
+  
+  $y_{t}=\beta_0+\beta_1x_{t1}+\beta_2x_{t2}+\beta_3x_{t3}+\lambda_1n_1+...+\lambda_Nn_N+u_{t}~~~~~~~donde~n:1...N~numero~de~individuos$
+
+- **Comparación de ambos modelos:**
+
+  Para fines de comodidad en la observación se ocultaron los 299 estimadores individuales de Variables Binarias ya que no son relevantes dentro del actual contexto.
+
+```{r}
+FE = plm(Y~X1+X2+X3, index = c("id", "t"), model = "within", data = df)
+VB = lm(Y~X1+X2+X3+as.factor(id), data=BD)
+stargazer(FE,VB,type="latex", title = "Efectos Fijos vs. Variables Binarias",
+          align = TRUE, column.labels=c("Efectos Fijos", "Variables Binarias"),
+          omit = 5:305,
+          header = FALSE,
+          keep.stat=c("n","rsq","f"),
+          font.size = "small",
+          omit.table.layout = "#n",
+          table.placement = "H")
+```
+
+  Como puede observarse en la **_Tabla 6: Efectos Fijos vs. Variables Binarias_**, los estimadores son idénticos para Efectos Fijos y para Variables Binarias y en ambos casos son significativos al 1%. Dada su naturaleza, no se puede decir si en realidad el modelo de Variables Binarias ofrece una mayor bondad de ajuste simplemente por tener un R2 mayor, pues ambos coeficientes de determinación no son comparables. Además, los grados de libertad son identicos, pues con $N$ número de individuos en la muestra, $T$ momentos en el tiempo y $k$ variables regresoras del modelo:
+  
+  Cuando tenemos Efectos Fijos se pierde un grado de libertad por cada efecto fijo eliminado:
+  
+  $Grados~de~Libertad~de~Efectos~Fijos=NT-k-N$
+  
+  Mientras que, Variables binarias es simplemente MCOC al se le incluye una variable dummy por cada observación de corte transversal $N$, entonces sus grados de libertad son los mismos de MCOC restándole $N$:
+  
+  $Grados~de~Libertad~de~Variables~Binarias=NT−k+1−N−1=NT−k−N$
+
+### **6) Estimación e interpretación de thetha para el modelo bajo el método de Efectos Aleatorios (Random):**
+
+  Para eliminar dichos efectos inobservados en el método de estimación de Datos Panel se puede realizar dicha estimación bajo el modelo de Efectos Aleatorios, el cual se expresa de la siguiente manera:
+
+  $y_{it}−\theta\overline{y}_{i}=\beta_0(1-\theta)+\beta_1(x_{it1}−\theta\overline{x}_{i1})+\beta_2(x_{it2}−\theta\overline{x}_{i2})+\beta_3(x_{it3}−\theta\overline{x}_{i3})+(u_{it}−\theta\overline{u}_{i})$ 
+
+  El estimador de $\theta$ puede ser obtenido según la fórmula:
+  
+  $\widehat{\theta}=1-(\frac{\widehat{\sigma}_u^2}{\widehat{\sigma}_u^2+T\widehat{\sigma}_a})^\frac{1}{2}$
+  
+  Al revisar la anterior ecuación, es notable que cuando $\theta=0$ se trata del modelo simple por MCOC (donde no hay efectos temporales ni individuales inobservados; cuando $\theta=1$ se trata del modelo bajo Efectos Fijos. Al no obtener ninguno de estos dos resultados, se infiere o por lo menos se intuye que nuestro modelo deberá ser estimado bajo Efectos Aleatorios. Obtener, pues, el valor de este $\theta$ es especialmente necesario para nuestro ejercicio. Sin embargo, no calcularemos el valor poblacional de dicho $\theta$ sino, como lo muestra la ecuación, su valor estimado. Obtener el valor estimado $\widehat{\theta}$ hará que nuestro método de estimación sea identificado bajo el nombre de **Mínimos Cuadrados Generalizados Factibles (_MCGF_)** y nuestros estimadores para los $\widehat{\beta}$ se encontrarán bajo el modelo de **Efectos Aleatorios**.
+  Cabe anotar que también es posible obtener dicho theta por medio del summary que arroja R para un modelo aleatorio de datos panel. Luego por su simplicidad y precisión, se decidió tomar esta estimación de theta $\widehat{\theta}$ para nuestro estudio.
+
+```{r results='hold'}
+RE = plm(Y~X1+X2+X3, model = "random", index = c(id,t), data = df)
+summary(RE)[7]
+```
+
+  Ahora, como ya fue mencionado, se intuía (bajo las pruebas anteriormente realizadas) que el valor para nuestro theta no podría ser 0 (ya que hay presencia de efectos inobservados bajo ese método), y ya su valor tampoco es igual a 1 se entiende que el modelo de Efectos Fijos tampoco es eficaz para nuestros datos. Lo que señala que el mejor modelo será el de Efectos Aleatorios.
+
+### **7) Prueba de hipótesis: Random vs. Within.**
+
+  Recordando que en el punto 5 se determinó que Efectos Fijos (Within) es preferible a Variables Binarias (VB) corresponde ahora validar entre Efectos Fijos y Efectos Aleatorios ¿Cuál es el mejor modelo? Además, es pertinente revisarlo ya que en el punto anterior se dejó claro que el valor de theta nos deja una intuición que vale la pena probar. Los dos modelos pueden verse a continuación:
+
+```{r}
+stargazer(FE,RE,type="latex", title = "Efectos Fijos vs. Efectos Aleatorios",
+          align = TRUE,column.labels=c("Efectos Fijos", "Efectos Aleatorios"),
+          keep.stat=c("n","rsq","f"),
+          header = FALSE,
+          font.size = "small",
+          omit.table.layout = "#n",
+          table.placement = "H")
+```
+
+- **Test de Hausman**
+
+  La prueba de Hausmann es en esencia una prueba de endogeneidad, en este caso concreto. Se quiere probar la endogeneidad del término de error (heterogeneidad inobservable), que **teóricamente** es eliminado en el modelo de Efectos Fijos. Esta endogeneidad suele darse por la omisión de variables relevantes que en efecto están correlacionadas con las variables que sí se tienen en cuenta, el efecto de estas variables omitidas sobre la estimación del modelo es absorbida entonces por el término de error.
+
+  La regla de decisión será, pues, esta **Prueba de Hausman** donde las hipótesis a contrastar son:
+  
+  $H_0:No~hay~diferencias~significativas~entre~EF~y~EA.$
+  
+  $H_1:Hay~diferencias~significativas~entre~EF~y~EA.$
+
+```{r results='hold'}
+phtest(FE, RE) -> th
+th
+#if(th$p.value<alpha){
+#  cat("Rechazo de la Hipótesis Nula.")
+#}else{
+#  cat("No se rechaza de la Hipótesis Nula..")
+#}
+```
+
+  Como se puede observar se cae en zona de $RH_0$ ya que el p-value es menor a nuestro nivel de significancia $\alpha=0.05$, con lo que se concluye que hay diferencias significativas entre ambos modelos.
+
+### **8) Comparación de todos los modelos estimados hasta ahora.**
+
+  A continuación se pueden observar los modelos trabajados hasta ahora:
+
+```{r}
+stargazer(pooled, FD, FE, VB, RE,type="latex", title = "Comparación General",
+          column.labels=c("Pooling","F.D.","Within","VB","Random"),
+          omit = 5:306,
+          header = FALSE,
+          keep.stat = c("rsq","n"),
+          font.size = "small",
+          omit.table.layout = "#n",
+          table.placement = "H")
+```
+
+  En definitiva, como ya se ha mencionado, estos modelos no son comparables bajo los datos que son visibles en la **_Tabla 8: Comparación General_**, pues sus coeficientes de determinación $R^2$ no nos sirven para la selección del mejor modelo. Para esta decisión se puede seguir lo desarrollado hasta ahora en los puntos anteriores.
+  
+  En primera instancia, la estimación bajo el método de MCOC resulta insuficiente pues se detectó la presencia de efectos temporales e individuales inobservados, violando el supuesto de endogeneidad de las regresoras respecto al término de error. Para la corrección de este problema se realizaron las pruebas detalladas para Primeras Diferencias, Efectos Fijos, Variables Binarias y Efectos Aleatorios. Donde poco a poco se fueron descartando las opciones y, en el punto anterior, se llegó a que mediante la interpretación del $\theta$ estimado, sumado a la prueba de Hausman, el mejor modelo es el de Efectos Aleatorios.
+
+### **9) Validación de supuestos del modelo seleccionado (Random):**
+
+- **Distrubución normal de las variables**
+
+  Como se mencionó anteriormente, confirmar la revisión de nuestra regresión cuando goza de las propiedades MELI, principalmente enfocándonos en la normalidad en las regresoras, asegurará que la variable regresada también gozara, en su estimación, una distribución normal. Para la validación de Normalidad utilizaremos la prueba de **Shapiro - Wilk** para muestras grandes.
+
+Las hipótesis a contrastar son:
+
+  $H_0:Normalidad$
+
+  $H_1:No~Normalidad$
+
++ _Para la variable Y:_
+
+```{r results='hold'}
+shapiro.test(BD$Y)
+```
+
+Para el caso de la variable dependiente Y, el p-value para la prueba realizada es menor al $\alpha=0.05$, por lo tanto se cae en zona de $RH_0$ concluyendo que esta variable no goza de normalidad.
+
++ _Para la variable X1:_
+
+```{r results='hold'}
+shapiro.test(BD$X1)
+```
+
+Para el caso de la variable explicativa X1, el p-value para la prueba realizada es mayor al $\alpha=0.05$, por lo tanto se cae en zona de $NRH_0$ concluyendo que esta variable goza de normalidad.
+
++ _Para la variable X2:_
+
+```{r results='hold'}
+shapiro.test(BD$X2)
+```
+
+Para el caso de la variable explicativa X2, el p-value para la prueba realizada es mayor al $\alpha=0.05$, por lo tanto se cae en zona de $NRH_0$ concluyendo que esta variable goza de normalidad.
+
++ _Para la variable X3:_
+
+```{r results='hold'}
+shapiro.test(BD$X3)
+```
+
+Para el caso de la variable explicativa X3, el p-value para la prueba realizada es menor al $\alpha=0.05$, por lo tanto se cae en zona de $RH_0$ concluyendo que esta variable no goza de normalidad.
+
+- **Correlación entre las variables**
+
+Se espera que las variables del modelo no sufran de multicolinealidad perfecta (correlación = -1 o 1). Para esta propiedad del modelo podemos ver la siguiente gráfica:
+
+```{r, fig.width=6, fig.height=4}
+chart.Correlation(BD[3:6], histogram = F, pch = 19)
+```
+
+  Es posible apreciar el anterior gráfico en donde, a simple vista, y dada la nube de puntos formada entre las variables, hay una relación directa entre éstas; dentro de la gráfica se puede encontrar bajo qué nivel de significancia resultan significativas las correlaciones bajo el Test de Correlación de Pearson para cada variable con respecto a Y. Los asteriscos indican que las variables explicativas son significativas bajo un alpha de 0.01% $\alpha=0.001$ donde X1 posee un valor de 0.5983464 según el test de Pearson, lo cual traduciría a una correlación positiva entre las variables. Esto implica que la relación entre X1 y Y es directa (cuando aumenta X1, aumenta Y). En cuanto a Y y X2, según el test de Pearson, se da una correlación de -0.4237041, es decir una relación inversa, tal y como puede ser observado en la nube de puntos. Por último, Y y X3 poseen una correlación de 0.5939949, casi tan acentuada como Y y X1, pero directa también. 
+
+- **Correcta especificación del modelo**
+
+Mediante la prueba de Ramsey se determina si el modelo está correctamente especificado o no. Dicha prueba se realiza estimando alternativamente:
+
+  $Y_{it}=\beta_{0}+\beta_1X_{1it}+\beta_2X_{2it}+\beta_3X_{3it}+\gamma_1\widehat Y^2_{it}+\gamma_2\widehat Y^3_{it}+u_{it}$
+
+Las hipótesis a contrastar son:
+
+  $H_0:\gamma_1=\gamma_2=0$
+
+  $H_1:al~menos~uno~de~los~\gamma \neq 0$
+
+```{r results='hold'}
+cuadra = lm(Y~X1+X2+X3, data = BD)
+cuadra = cuadra$fitted.values^2
+cubica = lm(Y~X1+X2+X3, data = BD)
+cubica = cubica$fitted.values^3
+mrestringido = plm(Y~X1+X2+X3+cuadra+cubica, model = "random", index = c(id,t), data = df)
+
+RESET = linearHypothesis(mrestringido, c("cuadra=0","cubica=0"))
+RESET
+#if(RESET$`Pr(>Chisq)`[2] < alpha){
+#  cat("Se rechaza la Hipótesis Nula.")
+#}else{
+#  cat("No se Rechaza la Hipótesis Nula.")
+#}
+```
+
+Como se puede observar, el p-value asociado (aquí mencionado como $Pr(>Chisq)$) es mayor al nivel de significancia $\alpha=0.05$, con lo que se cae en zona de $NRH_0$ y se concluye que no es necesario añadir exponentes al modelo original; es decir, que el modelo está correctamente especificado.
+
+- **Homoscedasticidad**
+
+Para comprobar si el modelo goza de varianza constante en el término de error se pueden realizar varias pruebas de hipótesis.
+
+En todas ellas las hipótesis a contrastar son:
+
+  $H_0:Var(u)=\sigma^2_{u}$
+
+  $H_1:Var(u)\neq\sigma^2_{u}$
+
++ _Prueba de BREUSCH - PAGAN:_
+
+```{r results='hold'}
+bptest(RE)
+#if(bptest(RE)[[4]] < alpha){
+#  cat("Se rechaza la Hipótesis Nula.")
+#}else{
+#  cat("No se rechaza la Hipótesis Nula.")
+#}
+```
+
+Ya que el p-value para la prueba realizada es mayor al $\alpha=0.05$, se cae en zona de $NRH_0$ concluyendo que el modelo goza de Homoscedasticidad en el término de error.
+
++ _Prueba de GOLFED - QUANDT:_
+
+```{r results='hold'}
+gqtest(RE)
+#if(gqtest(RE)[[5]] < alpha){
+#  cat("Se rechaza la Hipótesis Nula.")
+#}else{
+#  cat("No se rechaza la Hipótesis Nula.")
+#}
+```
+
+Ya que el p-value para la prueba realizada es mayor al $\alpha=0.05$, se cae en zona de $NRH_0$ reafirmando que el modelo goza de Homoscedasticidad en el término de error.
+
+- **No Auto-Correlación serial**
+
+Para comprobar si el término de error del modelo ($u$) se correlaciona con sus rezagos en un proceso autoregresivo de orden 1 ($AR[1]$) o de un orden mayor a 1 ($AR[2+]$) se utiliza la prueba de Durbin & Watson para el primer caso y la prueba de Breusch & Godfrey para el segundo caso. El modelo a evaluar para el primer caso ($AR[1]$) es:
+
+  $u_t=\rho u_{t-1}+\epsilon_t$
+
+Y para el segundo caso ($AR[2+]$) es:
+
+  $u_t=\rho_1u_{t-2}+\rho_2u_{t-3}+...+\rho_pu_{t-p}+\epsilon_t$
+
++ _Prueba de DURBIN - WATSON:_
+
+Las hipótesis a contrastar son:
+
+  $H_0:\rho=0$
+
+  $H_1:\rho\neq0$
+
+```{r results='hold'}
+pdwtest(RE)
+#if(pdwtest(RE)[[4]] < alpha){
+#  cat("Se rechaza la Hipótesis Nula.")
+#}else{
+#  cat("No se rechaza la Hipótesis Nula.")
+#}
+```
+
+Ya que el p-value para la prueba DW realizada es mayor al $\alpha=0.05$, se cae en zona de $NRH_0$ con lo que se concluye que no hay autocorrelación bajo un proceso autoregresivo de 1 periodo $AR[1]$ en el término de error. Ahora, hay que revisar si sucede con periodos mayores a 1.
+
++ _Prueba de BREUSCH - GODFREY:_
+
+Las hipótesis a contrastar son:
+  
+  $H_0:\rho_1=\rho_2=\rho_p=0$
+  
+  $H_1:Al~menos~uno~de~los~\rho\neq0$
+
+```{r results='hold'}
+pbgtest(RE)
+#if(pbgtest(RE)[[4]] < alpha){
+#  cat("Se rechaza la Hipótesis Nula.")
+#}else{
+#  cat("No se rechaza la Hipótesis Nula.")
+#}
+```
+
+El p-value para la prueba Breusch-Godfrey realizada es mayor al $\alpha=0.05$, se cae en zona de $NRH_0$ con lo que se concluye que no hay autocorrelación bajo un proceso autoregresivo de dos o más periodos $AR[1+]$ en el término de error.
+
+Con ambas pruebas se concluye que no hay ningún tipo de autocorrelación serial en el término de error del modelo.
+
+- **Normalidad**
+
+La siguiente prueba ya no es aplicada a las variables presentes para la estimación del modelo, sino que ahora se trata de la evaluación del supuesto de _Normalidad_ para los **residuos** del modelo.
+
+Nuevamente, las hipótesis a contrastar son:
+
+  $H_0:Normalidad$
+
+  $H_1:No~Normalidad$
+
+```{r results='hold'}
+shapiro.test(RE$residuals)
+#if(shapiro.test(RE$residuals)[[2]] < alpha){
+#  cat("Se rechaza la Hipótesis Nula.")
+#}else{
+#  cat("No se rechaza la Hipótesis Nula.")
+#}
+```
+
+Ya que el p-value para la prueba realizada es mayor al $\alpha=0.05$, se cae en zona de $NRH_0$ con lo que se concluye que los residuos del modelo gozan de una distribución normal.
+
+  + *Visualización*
+
+```{r, fig.width=10, fig.height=5}
+residuos = as.data.frame(RE$residuals)
+names(residuos) = "Residuos"
+ggplot(data = residuos, mapping = aes(x = Residuos))+
+  ggtitle("Histograma") +
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Residuos)), color="white", linetype="dashed", size=1) -> hr
+
+ggplot(residuos, aes(sample = Residuos))+
+  ggtitle("QQPlot") +
+  theme(plot.title = element_text(hjust = 0.5))+
+  stat_qq(color = "darkblue") + stat_qq_line() -> qqr
+
+grid.arrange(hr,qqr, ncol=2)
+```
+\pagebreak
+
+## SEGUNDA PARTE: Análisis sobre datos del coronavirus covid-19.
+
+- **Variables seleccionadas:**
+
+```{r results='hold'}
+covid = read.csv("CoronavirusData.csv", header = T)
+covid = covid[,c(1,2,6,7,10,11,14,15,16,17,18,19,20,31,32,33,34,48)]
+names(covid) = c("Country", "Week", "Death.per.1m" ,"Lagged.death.per.1m", "Cases.per.1m", "Lagged.cases.per.1m", "Weakly.Tests.per.1m", "Stringency.Index",  "FL.Stringency.Index", "SL.Stringency.Index", "Population", "UHC.sc.index" ,"Population65", "Doctors", "Nurses", "Beds", "isolate.patients" ,"Government.expend")
+glimpse(covid)
+```
+
+Con miras a poder explicar la tasa de fatalidad por el coronavirus COVID-19 en múltiples países, de manera rigurosa se escogieron una serie de variables regresoras que poseen una relación y explican en cierta medida la tasa de fatalidad por coronavirus. Así, las variables regresoras escogidas fueron: país, semana, muertes por millón, rezagos de muertes por millón, casos por millón, rezagos de casos por millón, pruebas semanales por millón, Índice de rigurosidad, primer rezago del índice de rigurosidad, segundo rezago del índice de rigurosidad, población, índice UHC de cobertura de salud, población de personas con 65 o más años, doctores, enfermeras, camas de hospital, capacidad de aislar pacientes, y por último la variable regresora de gasto gubernamental en salud en cada país. A continuación, se hará una breve explicación del porqué se decidió añadir estas variables. 
+
+  + **País (Country)**
+Esta variable será usada como ID en nuestro modelo, de manera que no hay duda sobre añadirla o no a éste, pues será usado como referente. 
+
+  + **Semana (Week)**
+Finalmente fue decidido añadir esta variable y no otra ya que posee información lo suficientemente generalizada sobre el tiempo como para ser adecuada; a diferencia de la variable, por ejemplo, “Fecha de la primera muerte” que nos habla de algo mucho más específico; sin embargo, esta última será añadida al informe presentado para que pueda ser evidenciada la fecha como un marco de referencia al cual acudir temporalmente. 
+
+
+  + **Muertes por millón (Death.per.1.million)**
+Esta es la variable Y que será explicada en nuestro modelo, para lo cual fue pensado en un principio una transformación de tipo logarítmica con el ánimo de ser medida como una tasa y que no dependa del número de población. Sin embargo fue allí cuando nos enfrentamos a uno de los problemas con base en los datos, pues para esta variable, se poseen datos equivalentes a 0, lo que implica que no sea válida la transformación, pues el logaritmo de 0 no existe. Para resolver este problema y según varios autores, era posible cambiar los valores de 0 por 0.00000001, lo cual no fue una opción para el grupo de trabajo ya que sería modificar los valores de los datos por unos que no son reales y con carencia de argumentos; lo que implicaría, a nuestro juicio, que nuestro modelo se aleja drásticamente de la realidad. Finalmente se decidió no realizar la transformación logarítmica, sino trabajar con el panel desbalanceado, pero sin omitir los datos o 0 encontrados. 
+
+  + **Rezagos (Lagged---)**
+A nuestro modelo también se le añadieron cuatro variables rezagadas, a saber, los rezagos de las variables muertes por millón, casos por millón, y los dos rezagos de la variable de índice de rigurosidad. Poniendo en contexto y para casos generales, los valores de una variable para el periodo T2 para la variable rezagada son los valores de la variable “normal” siendo rezagada para el periodo T1; luego es crucial que dichas variables sean incluidas en el modelo, pues, por ejemplo, la cantidad de muertes por millón depende de la cantidad de muertes por millón de la semana inmediatamente anterior y exclusivamente de esta, sino también de la anterior a la anterior, así, estas variables rezagadas inciden considerablemente en lo estudiado y no incluirlas podría resultar en ser un error. Dada la naturaleza de las variables rezagadas tal y como fue explicado, es normal que dichas variables posean una alta correlación con la variable original no rezagada, aunque ello no implica que haya sido un error de correlación. 
+
+  + **Casos por millón (Cases.per.1.million)**
+Creemos que existe una fuerte relación entre la tasa de mortalidad y el número de casos por millón, y dicha relación se crea de manera natural, a simple vista es posible deducir que a mayor cantidad de casos, habrá más muertos; luego se decidió incluir esta variable con la unidad de medida de “por millón” ya que brinda información apropiada al ser un concepto homólogo al de porcentaje. 
+
+  + **Pruebas semanales por millón (Tests.per.1.million)**
+Por otro lado, se decidió también añadir la variable que indica el número de pruebas semanales realizadas en cada país no solo por lo que implica explícitamente, sino porque también podría hablar de cuán preparado se encuentra el país para afrontar la pandemia, pues a mayor número de pruebas, se espera que se encuentren más pacientes con el virus, y sus muertes, eventualmente puedan ser relacionadas esta enfermedad. Esta variable fue escogida sobre las otras similares bajo el mismo argumento de una unidad de medida homólogo al porcentaje. 
+
+  + **Índice de rigurosidad (Stringency Index)**
+Según lo encontrado, el Stringency Index tiene como objetivo principal rastrear y comparar las medidas políticas tomadas en diferentes países; lo que implica que un mayor número de índice de rigurosidad, corresponde a una calificación positiva de un grupo de políticas y medidas tomadas; luego se espera que entre mayor sea el índice de rigurosidad, menor sea la tasa de mortalidad, y es por esta razón que creímos desde un principio incluirla en nuestro modelo como una variable regresora que explica dicha tasa mencionada. 
+
+  + **Población (Population)**
+Sin duda alguna creímos pertinente incluir la variable la cual nos habla del número de población, pues permite comparar directamente los países con respecto a su tasa de mortalidad y con respecto a las otras variables regresoras. No es comparable un país que tenga una tasa de mortalidad del 1% con 10 habitantes a un país con una tasa de mortalidad del 1% y con 1000 habitantes. Para el correcto análisis y dado que no se tenía una unidad de medida homóloga al de porcentaje como en variables regresoras anteriores, entonces se decidió aplicarle una transformación logarítmica; más adelante se profundizará un poco más. 
+
+  + **Índice UHC de cobertura de salud (UHC.service.coverage.index)**
+Según la OMS, el índice UHC de cobertura de salud califica dentro de un rango de 0-100 precisamente lo que su nombre indica, la cobertura en salud que tiene un país a lo largo de su territorio; dentro de los datos es posible por ejemplo encontrar que el valor mínimo es de 40 y su valor máximo es 89, lo que implica que ese país en específico posee una muy buena cobertura en salud. Se consideró también que esta variable podría influir de manera significativa en la tasa de mortalidad de un país y es por esta razón que se incluyó. 
+
+
+  + **Población de personas con 65 o más años (Population.65.and.above)**
+Esta variable en específico, aunque su estudio es exigido en uno de los apartados del taller, consideramos también incluirla ya que creemos que incide de manera significativa la cantidad de personas con 65 años o más y la tasa de mortalidad, luego a mayor tasa de este tipo de población, también habrá mayor tasa de muertes por coronavirus dado las bajas defensas que estas personas poseen en su microorganismo y la capacidad de respuesta ante este virus. Esta variable originalmente se encuentra dada como tasa en un porcentaje, de manera que no fue necesaria aplicar una transformación logarítmica con este fin sino trabajar con ella tal y como fue recopilada. 
+
+  + **Doctores, enfermeras y camas de hospital (Doctors -- Nurses.and.midwives -- Hospital.beds)**
+Se cree que la cantidad de doctores, enfermeras y camas de hospital puede incidir significativamente con la tasa de mortalidad, pues a mayor cantidad de doctores, enfermeras y camas de hospital, habrá mayor facilidad para enfrentar el virus en pacientes contagiados. De la misma manera y bajo los mismos argumentos anteriormente mencionados, se espera trabajar estas variables en términos de porcentaje puesto que depende de cada país, para ello se aplicará a cada una de las variables y por separado, una transformación logarítmica que podrá ser apreciada eventualmente en el documento; por último se evaluará si cada una de estas transformaciones logarítmicas aplican como se espera para cada una de las variables mencionadas. 
+
+  + **Capacidad de aislar pacientes (Capacity.to.isolate.patients)**
+Por otro lado, se decidió incluir esta variable binaria con la cual se mide la capacidad que tiene el sistema de salud de cada país para aislar o no los pacientes que poseen el virus o que poseen alto riesgo de poseerlo. Sin duda alguna creemos que el que un país no tenga la capacidad de este aislamiento aumentará significativamente la tasa de mortalidad ya que implicaría también una alta tasa de contagio. Al ser una variable binaria y por ende con poca variación en sus datos, se decidió no hacer un análisis descriptivo de ésta como si se hizo con otras variables. 
+
+  + **Gasto gubernamental en salud (Government.health.expenditure)**
+Por último, la variable regresora de gasto gubernamental en salud fue considerada como una variable con alta significancia que podría incidir considerablemente en la tasa de mortalidad ya que dependiendo de este gasto gubernamental, el área de la salud tendrá o no los suficientes recursos para hacerse cargo del control de una pandemia como lo es la del virus COVID-19; así, entre más gasto gubernamental en salud haya, se espera que haya menos tasa de mortalidad dados todos los instrumentos para disminuir esta tasa. 
+
+
+- **¿Hay valores faltantes (NA) en los datos?**
+
+```{r}
+cat("     Hay",sum(is.na(covid)),"valores faltantes (NA) en la variable 'Weakly Test per 1 Million'.")
+```
+
+¿Qué hacer con esos valores faltantes?
+
+Para el actual caso de estudio **NO** se balanceará el panel, pues esto implicaría estandarizar valores faltantes (NA) para distintos países en distintas circunstancias, también implicaría asemejar todos los países bajo un estudio temporal donde la cantidad de semanas sea equivalente para todos. Esto último es lo que presenta mayor complejidad, pues no podemos ignorar el hecho de que el virus no llegó al mismo tiempo para todos los lugares del mundo, además que las condiciones que hicieron que la primera persona muriera debido al covid-19 también varían, estandarizar el panel de datos, en definitiva, consideramos que sería una inclusión de sesgo bastante arriesgada y muy seguramente no tan fructífera para el análisis, propiamente dicho, de los datos presentados.
+
+- **Formato de las variables:**
+
+La variable "Week" está siendo tomada bajo un formato erroneo, hay que transformar el formato a variable cualitativa.
+
+```{r}
+covid$Week = as.factor(covid$Week)
+```
+
+Finalmente, se puede convertir los datos en un panel data frame para obtener un mayor provecho a los datos que son de tipo longitudinal.
+
+```{r}
+pcovid = pdata.frame(covid, index = c("Country", "Week"))
+```
+
+
+### 1) **Estadística Descriptiva de las variables**
+
+  + **Histogramas**
+
+```{r, warning=FALSE, fig.width=12, fig.height=8}
+ggplot(data = pcovid, mapping = aes(x = Death.per.1m))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Death.per.1m)), color="white", linetype="dashed", size=1) -> ch1
+
+ggplot(data = pcovid, mapping = aes(x = Cases.per.1m))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Cases.per.1m)), color="white", linetype="dashed", size=1) -> ch2
+
+ggplot(data = pcovid, mapping = aes(x = Weakly.Tests.per.1m))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Weakly.Tests.per.1m)), color="white", linetype="dashed", size=1) -> ch3
+
+ggplot(data = pcovid, mapping = aes(x = Stringency.Index))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Stringency.Index)), color="white", linetype="dashed", size=1) -> ch4
+
+ggplot(data = pcovid, mapping = aes(x = Population))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Population)), color="white", linetype="dashed", size=1) -> ch5
+
+ggplot(data = pcovid, mapping = aes(x = UHC.sc.index))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(UHC.sc.index)), color="white", linetype="dashed", size=1) -> ch6
+
+ggplot(data = pcovid, mapping = aes(x = Population65))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Population65)), color="white", linetype="dashed", size=1) -> ch7
+
+ggplot(data = pcovid, mapping = aes(x = Doctors))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Doctors)), color="white", linetype="dashed", size=1) -> ch8
+
+ggplot(data = pcovid, mapping = aes(x = Nurses))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Nurses)), color="white", linetype="dashed", size=1) -> ch9
+
+ggplot(data = pcovid, mapping = aes(x = Beds))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Beds)), color="white", linetype="dashed", size=1) -> ch10
+
+ggplot(data = pcovid, mapping = aes(x = Government.expend))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(Government.expend)), color="white", linetype="dashed", size=1) -> ch11
+
+grid.arrange(ch1,ch2,ch3,ch4,ch5,ch6,ch7,ch8,ch9,ch10,ch11, ncol=4,
+     top = textGrob("Histograma de cada variable",gp=gpar(fontsize=20,font=3)))
+```
+
+Como puede ser observado los histogramas de cada una de las variables, a simple vista es posible afirmar que ninguna presenta una distribución normal, y en algunas de estas la concentración de datos hacia un lado de la tabla es notorio, por ejemplo en la variable “Death per 1m” que posee una distribución hacia el lado izquierdo de la tabla, esta información podría ser también comparada con el valor de su asimetría (4.323). De manera contraria también es posible encontrar asimetrías negativas como la de la variable “Stringency index” (-1.361) que corresponder a una asimetría a derecha donde su distribución se concentra hacia este lado del histograma como puede ser evidenciado y respaldado. En cuanto a la curtosis de las variables, es factible afirmar que la mayoría posee una distribución de tipo leptocúrtica ya que su valor de curtosis es mayor a 3, luego su forma será un poco más puntiaguda en comparación con otras formas de distribución como la platicúrtica para el caso de la variable de “Población de 65 o más años” donde su valor de curtosis (1.927) < 3.
+
+
+  + Valores mínimos, máximos, rango intercuartil, mediana y media aritmética de las variables.
+
+```{r}
+pcovid %>%
+  summarise_at(c("Death.per.1m", "Cases.per.1m", "Weakly.Tests.per.1m", "Stringency.Index", "Population", "UHC.sc.index", "Population65", "Doctors", "Nurses", "Beds", "Government.expend"),
+               list(min=min,media=mean,mediana=median,max=max,rango_int_cuartil=IQR),
+               na.rm = TRUE) -> a
+
+data <- as.data.frame(matrix(round(a,3),11))
+names(data) <- c("Mínimo", "Media", "Mediana", "Máximo","Rango Inter Cuartil")
+rownames(data) <- c("Death.per.1m", "Cases.per.1m", "Weakly.Tests.per.1m", "Stringency.Index", "Population", "UHC.sc.index", "Population65", "Doctors", "Nurses", "Beds", "Government.expend")
+kable(data, align = "c", caption = "Medidas Representativas", format = "latex")%>%
+kable_styling(latex_options = "hold_position") 
+```
+
+  + Gráficos para los anteriores valores:
+
+```{r, warning=FALSE, fig.width=12, fig.height=8}
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Death.per.1m), outlier.colour = "red", fill = "lightblue") -> cb1
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Cases.per.1m), outlier.colour = "red", fill = "lightblue") -> cb2
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Weakly.Tests.per.1m), outlier.colour = "red", fill = "lightblue") -> cb3
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Stringency.Index), outlier.colour = "red", fill = "lightblue") -> cb4
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Population), outlier.colour = "red", fill = "lightblue") -> cb5
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = UHC.sc.index), outlier.colour = "red", fill = "lightblue") -> cb6
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Population65), outlier.colour = "red", fill = "lightblue") -> cb7
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Doctors), outlier.colour = "red", fill = "lightblue") -> cb8
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Nurses), outlier.colour = "red", fill = "lightblue") -> cb9
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Beds), outlier.colour = "red", fill = "lightblue") -> cb10
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = Government.expend), outlier.colour = "red", fill = "lightblue")-> cb11
+
+grid.arrange(cb1,cb2,cb3,cb4,cb5,cb6,cb7,cb8,cb9,cb10,cb11, ncol=4,
+     top = textGrob("Box-Plot de cada variable",gp=gpar(fontsize=20,font=3)))
+```
+
+Por último, y con respecto a los Boxplot realizados, es posible observar que muchas de las gráficas no ofrecen información valiosa dado que o no vale la pena por ser variables dummy o binarias o por el contrario poseen tantos datos atípicos que se hace imposible obtener información a simple vista sobre estas variables. Como un ejemplo de este problema, es posible redimirse a los boxplot realizados para la variable “Population”, “Doctors”, “Nurses” “Beds” y “Government.expend”
+
+  + Los cuatro momentos estadísticos (Media, Varianza, Asimetría y Curtosis):
+
+```{r, warning=FALSE}
+pcovid%>%
+  summarise_at(c("Death.per.1m", "Cases.per.1m", "Weakly.Tests.per.1m", "Stringency.Index", "Population", "UHC.sc.index", "Population65", "Doctors", "Nurses", "Beds", "Government.expend"),
+               list(media=mean, sd=sd, asimetria=skewness, curtosis=kurtosis),
+               na.rm = TRUE) -> a
+
+data <- as.data.frame(matrix(round(a,3),11))
+rownames(data) <- c("Death.per.1m", "Cases.per.1m", "Weakly.Tests.per.1m", "Stringency.Index", "Population", "UHC.sc.index", "Population65", "Doctors", "Nurses", "Beds", "Government.expend")
+names(data) <- c("Media", "Varianza", "Asimetria", "Curtosis")
+kable(data, align = "c", caption = "Momentos estadísticos", format = "latex")%>%
+kable_styling(latex_options = "hold_position")
+```
+
+- **Forma funcional de las variables:**
+
+  Como fue mencionado con anterioridad en la sección de selección de variables, para el modelo a estimar consideramos dos razones específicas por las cuales aplicar una transformación a las variables: 1. por la naturalidad de los datos, no es coherente hablar de la cantidad de doctores en un país con 10 habitantes que con 100 habitantes; y 2. se desea disminuir la cantidad de datos atípicos en las muestras. Así pues, se realizaron las transformaciones logarítmicas para las variables población, doctores, enfermeras, camas de hospitales y gasto gubernamental, y se realizó un nuevo análisis descriptivo con dicha transformación aplicada. 
+
+```{r, echo=TRUE}
+pcovid$LogPopulation = log(pcovid$Population)
+pcovid$LogDoctors = log(pcovid$Doctors)
+pcovid$LogNurses = log(pcovid$Nurses)
+pcovid$LogBeds = log(pcovid$Beds)
+pcovid$LogGovernment.expend = log(pcovid$Government.expend)
+```
+
+  Tras realizar esta transformación podemos revisar nuevamente las estadísticas y las gráficas anteriores:
+
+  + **Histogramas**
+
+```{r, , message=FALSE, warning=FALSE, fig.width=12, fig.height=10}
+ggplot(data = pcovid, mapping = aes(x = LogPopulation))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(LogPopulation)), color="white", linetype="dashed", size=1) -> chl5
+
+ggplot(data = pcovid, mapping = aes(x = LogDoctors))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(LogDoctors)), color="white", linetype="dashed", size=1) -> chl8
+
+ggplot(data = pcovid, mapping = aes(x = LogNurses))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(LogNurses)), color="white", linetype="dashed", size=1) -> chl9
+
+ggplot(data = pcovid, mapping = aes(x = LogBeds))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(LogBeds)), color="white", linetype="dashed", size=1) -> chl10
+
+ggplot(data = pcovid, mapping = aes(x = LogGovernment.expend))+
+  geom_histogram(aes(y=..density..), bins = 25, fill = "darkblue", color = "black")+
+  geom_density(alpha = 0.5, fill="lightblue")+
+  geom_vline(aes(xintercept=mean(LogGovernment.expend)), color="white", linetype="dashed", size=1) -> chl11
+
+grid.arrange(chl5,ch5,chl8,ch8,chl9,ch9,chl10,ch10,chl11,ch11, ncol=2,
+     top = textGrob("Histograma Comparativo",gp=gpar(fontsize=20,font=3)))
+```
+
+```{r}
+pcovid %>%
+  summarise_at(c("Population", "LogPopulation", "Doctors", "LogDoctors", "Nurses", "LogNurses", "Beds", "LogBeds", "Government.expend", "LogGovernment.expend"),
+               list(min=min,media=mean,mediana=median,max=max,rango_int_cuartil=IQR),
+               na.rm = TRUE) -> a
+
+data <- as.data.frame(matrix(round(a,3),10))
+names(data) <- c("Mínimo", "Media", "Mediana", "Máximo","Rango Inter Cuartil")
+rownames(data) <- c("Population", "LogPopulation", "Doctors", "LogDoctors", "Nurses", "LogNurses", "Beds", "LogBeds", "Government.expend", "LogGovernment.expend")
+kable(data, align = "c", caption = "Medidas Representativas Comparativos", format = "latex")%>%
+kable_styling(latex_options = "hold_position") 
+```
+
+```{r, warning=FALSE, message=FALSE, fig.width=12, fig.height=8}
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = log(Population)), outlier.colour = "red", fill = "lightblue") -> cbl5
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = LogDoctors), outlier.colour = "red", fill = "lightblue") -> cbl8
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = LogNurses), outlier.colour = "red", fill = "lightblue") -> cbl9
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = LogBeds), outlier.colour = "red", fill = "lightblue") -> cbl10
+
+ggplot(data = pcovid)+
+  geom_boxplot(mapping = aes(x = LogGovernment.expend), outlier.colour = "red", fill = "lightblue")-> cbl11
+
+grid.arrange(cbl5,cb5,cbl8,cb8,cbl9,cb9,cbl10,cb10,cbl11,cb11, ncol=2,
+     top = textGrob("Box-Plot Comparativo",gp=gpar(fontsize=20,font=3)))
+```
+
+  Como puede ser evidenciado en los histogramas comparativos, boxplot comparativos y la Tabla 11 sobre las medidas representativas comparativas entre las variables transformadas en primer lugar y las que no lo están después, algunas de las que tienen la transformación logarítmica presentan una disminución de datos atípicos como era de esperarse, lo cual hace que la forma distribución en el histograma luzca más asimétrica que lo que era antes; lo mismo sucede con su curtosis, la cual es más cercana a 3 (mesocúrtica) que lo que era antes. Ahora bien, no sucede lo mismo para todas las variables, puesto que, si se observa “Doctors” y “Nurses”, es posible afirmar que ocurrió exactamente lo contrario a lo esperado: aumentaron la cantidad de datos atípicos y su asimetría se alejó drásticamente, con lo cual su distribución estaba distanciada de ser simétrica. Dados los resultados de las transformaciones logarítmicas en las variables, y comparando el análisis descriptivo, es posible afirmar que se cumplió con los dos objetivos anteriormente planteados y la mejor decisión para trabajar de manera adecuada con estos datos fue realizar la transformación logarítmica para todas las variables consideradas a excepción de las variables “Doctors” y “Nurses”. 
+
+```{r, warning=FALSE}
+pcovid%>%
+  summarise_at(c("Population", "LogPopulation", "Doctors", "LogDoctors", "Nurses", "LogNurses", "Beds", "LogBeds", "Government.expend", "LogGovernment.expend"),
+               list(media=mean, sd=sd, asimetria=skewness, curtosis=kurtosis),
+               na.rm = TRUE) -> a
+
+data <- as.data.frame(matrix(round(a,3),10))
+rownames(data) <- c("Population", "LogPopulation", "Doctors", "LogDoctors", "Nurses", "LogNurses", "Beds", "LogBeds", "Government.expend", "LogGovernment.expend")
+names(data) <- c("Media", "Varianza", "Asimetria", "Curtosis")
+kable(data, align = "c", caption = "Momentos estadísticos Comparativos", format = "latex")%>%
+kable_styling(latex_options = "hold_position")
+```
+
+```{r}
+#Actualizar el Data Frame con las variables seleccionadas eliminando el resto.
+
+pcovid = pcovid[, -which(names(pcovid) %in% c("Population","Beds","Government.expend","LogDoctors","LogNurses",""))]
+```
+
+  - **Correlación entre las variables:**
+
+Con aras de presentar una gráfica legible y que proporcionará la información de una manera adecuada para la correlación entre cada una de las 16 variables aquí presentadas, se decidió incluir una gráfica de calor de correlación, pues la función cor en donde se muestran múltiples nubes de puntos y el coeficiente de correlación de Pearson, al ser una cantidad de variables considerable no se podía extraer información a simple vista de dicha nube de puntos. Por el contrario, esta gráfica de color presentada a continuación presenta también el coeficiente de correlación de Pearson, pero con la diferencia que no mostrará una nube de puntos sino unos círculos de color azul y rojo, donde a mayor tamaño del círculo será más acentuada la correlación entre ese par de variables; teniendo en cuenta también que el color azul corresponde a una correlación positiva y el color rojo a una correlación negativa. 
+
+```{r, fig.width=10, fig.height=8}
+corrplot.mixed(cor(pcovid[,3:18], use = "complete.obs"), tl.pos = "lt")
+```
+
+Como fue argumentado anteriormente, es claro que los rezagos de las variables pueden presentar altos valores de correlación con respecto a sus mismas variables originales sin rezago o incluso con otras que pueden hablar de algo similar implícitamente, luego se omitirá el análisis de correlación para estos casos. Por otro lado, resulta bastante interesante comprobar por medio de la correlación y sin estudios o análisis de mayor profundidad, que una variable posee bastante influencia la una sobre la otra. por ejemplo, el gasto gubernamental en salud posee una alta correlación con el índice UHC que corresponde al índice de cobertura en un país (0.88), así como el número de doctores y enfermeras también posee un alto valor de correlación según Pearson con respecto al índice UHC. De la misma manera es posible extraer correlaciones negativas esperadas, por ejemplo, entre la variable “LogPopulation” y “Doctors” o “Nurses” con valores de correlación de Pearson de -0.39 y -0.32 respectivamente, lo cual tiene bastante sentido. 
+
+### 2) **Estimación del mejor modelo**
+
+Tras definir las variables que se consideran importantes para los fines de nuestro análisis, revisar sus medidas representativas y ver cómo se comportan estos datos antes de transformarlos y después de trasnformar unas pocas variables que se consideraron pertinentes para optimizar la regresión, corresponde ahora definir qué modelo será preferido para ello.
+
+```{r, warning=FALSE, message=FALSE}
+pooled = plm(Death.per.1m ~  Lagged.death.per.1m + Cases.per.1m + Lagged.cases.per.1m + Weakly.Tests.per.1m + Stringency.Index + FL.Stringency.Index + SL.Stringency.Index + LogPopulation + UHC.sc.index + Population65 + Doctors + Nurses + LogBeds + LogGovernment.expend + isolate.patients
+             , data = pcovid,
+             index = c("Country", "Week"),
+             model = "pooling"
+             )
+
+fixed = plm(Death.per.1m ~  Lagged.death.per.1m + Cases.per.1m + Lagged.cases.per.1m + Weakly.Tests.per.1m + Stringency.Index + FL.Stringency.Index + SL.Stringency.Index + LogPopulation + UHC.sc.index + Population65 + Doctors + Nurses + LogBeds + LogGovernment.expend + isolate.patients
+             , data = pcovid,
+             index = c("Country", "Week"),
+             model = "within"
+             )
+
+fir.dif = plm(Death.per.1m ~  Lagged.death.per.1m + Cases.per.1m + Lagged.cases.per.1m + Weakly.Tests.per.1m + Stringency.Index + FL.Stringency.Index + SL.Stringency.Index + LogPopulation + UHC.sc.index + Population65 + Doctors + Nurses + LogBeds + LogGovernment.expend + isolate.patients
+             , data = pcovid,
+             index = c("Country", "Week"),
+             model = "fd"
+             )
+
+random = plm(Death.per.1m ~  Lagged.death.per.1m + Cases.per.1m + Lagged.cases.per.1m + Weakly.Tests.per.1m + Stringency.Index + FL.Stringency.Index + SL.Stringency.Index + LogPopulation + UHC.sc.index + Population65 + Doctors + Nurses + LogBeds + LogGovernment.expend + isolate.patients
+             , data = pcovid,
+             index = c("Country", "Week"),
+             model = "random"
+             )
+
+stargazer(pooled,fixed, fir.dif, random, type="latex",
+          column.labels = c("MCOC", "Efectos Fijos", "Primeras Diferencias", "Efectos Aleatorios"),
+          title="Comparación de Modelos",
+          font.size = "scriptsize",
+          header = FALSE,
+          omit.table.layout = "#n",
+          keep.stat = c("n","rsq"),
+          table.placement = "H")
+```
+
+- **Prueba para MCOC**
+
+La regla de decisión será una prueba de **Breusch-Pagan** para detectar Homoscedasticidad donde las hipótesis a contrastar son:
+
+  $H_0:Var(u)=\sigma^2_{u}$
+
+  $H_1:Var(u)\neq\sigma^2_{u}$
+
+Y si la prueba arroja No Rechazo de la Hipótesis Nula (p-value>0.05) se concluye que el modelo bajo Mínimos Cuadrados Combinados (MCOC) es un buen candidato en términos de eficacia.
+
+```{r results='hold'}
+bptest(pooled)
+```
+
+Como se puede observar, el p-value asociado a la prueba es menor al nivel de significancia $\alpha=0.05$, con lo que se cae en zona de $RH_0$ y se concluye que MCOC no es una buena selección estadísticamente hablando. Para confirmar esta intuición se debe revisar ahora si hay efectos inobservados en el modelo y de ser así, buscar cómo eliminarlos.
+
+  + **Efectos Temporales**
+
+```{r results='hold'}
+# Si hay efectos individuales (ai) hay que elegir entre fixed, random, fd para eliminarlos, de lo contrario es más eficaz pooled.
+
+# ¿El efecto es individual, temporal, o ambos?
+plmtest(pooled,"time","bp")     #Ho:Efectos temporales no significativos
+```
+
+El p-value asociado a la prueba es mayor al nivel de significancia $\alpha=0.05$, con lo que se cae en zona de $NRH_0$ y se concluye que en el Panel de datos **no** hay efectos temporales significativos.
+
+  + **Efectos Individuales**
+
+```{r results='hold'}
+plmtest(pooled,"individual","bp")     #Ho:Efectos indivuduales no significativos
+```
+
+El p-value asociado a la prueba es mayor al nivel de significancia $\alpha=0.05$, con lo que se cae en zona de $NRH_0$ y se concluye que en el Panel de datos **no** hay efectos individuales significativos.
+
+  + **Ambos Efectos**
+
+```{r results='hold'}
+plmtest(pooled,"twoways","bp")     #Ho:Efectos temporales e individuales no significativos
+```
+
+El p-value asociado a la prueba es mayor al nivel de significancia $\alpha=0.05$, con lo que se cae en zona de $NRH_0$ y se concluye, en concordancia con las anteriores dos pruebas, que en el Panel de datos **no** hay efectos inobservados significativos.
+
+- **Prueba para Efectos Fijos vs. MCOC**
+
+A pesar de no encontrar dichos efectos inobservables, cabe revisar si el modelo podría estar, estadísticamente hablando, mejor estimado bajo el modelo de Efectos Fijos que bajo MCOC. La regla de decisión será una prueba de **Multiplicadores de Lagrange por Breusch-Pagan** para detectar si el modelo el modelo Fixed sería mejor a MCOC considerando su utilidad eliminando efectos inobservables por insignificantes que hayan resultado. Las hipótesis a contrastar son respecto a la la varianza de los efectos fijos ($\alpha_i$) dentro del término de error compuesto ($u_{it}$):
+
+  $H_0: Var(a_i)=0$
+  
+  $H_1: Var(a_i)\neq0$
+
+```{r results='hold'}
+plmtest(fixed,type = "bp")
+```
+
+El p-value asociado a la prueba es mayor al nivel de significancia $\alpha=0.05$, con lo que se cae en zona de $NRH_0$ y se concluye que los efectos fijos ($\alpha_i$) dentro del termino de error no son significativos, por lo que se elige MCOC.
+
+- **Prueba para Efectos Aleatorios vs. MCOC**
+
+La misma prueba del caso anterior, aplicada ahora para contrastar entre Efectos Aleatorios y MCOC.
+
+```{r results='hold'}
+plmtest(random,type = "bp")
+```
+
+Nuevamente, el p-value asociado a la prueba es mayor al nivel de significancia $\alpha=0.05$, con lo que se cae en zona de $NRH_0$ y se concluye que los efectos ideosincráticos dentro del termino de error no son significativos, por lo que se elige MCOC.
+
+En conclusión, no hay motivos para pensar que se deba realizar más pruebas y se acepta que la estimación bajo MCOC es suficiente brindando consistencia y mayor eficacia a la regresión.
+
+### 3) **¿En cuánto cambia el número de muertes cuando el número de contagios aumenta en 100 personas?**
+
+Teniendo en cuenta el modelo seleccionado (Pooled) bajo MCOC:
+
+```{r}
+stargazer(pooled, type="latex",
+          column.labels = "MCOC",
+          title="Covid-19",
+          font.size = "small",
+          header = FALSE,
+          omit.table.layout = "#n",
+          style = "all2",
+          table.placement = "H")
+```
+
+Para determinar cuánto se estima que cambien la muertes por Covid-19 cuando el número de contagios aumenta en 100, manteniendo todo lo demás constante (ceteris paribus), el proceso a realizar sería, primero cuantificar nuestra variable **Cases.per.1m** de manera que no sea relativo a un millon de personas, sino cuando sea relativo a solo 100 personas. De esa manera la variable **Cases.per.1m** se considerará en un 0.0001 de su valor.
+
+Ahora, para revisar el cambio se debe multiplicar el $\beta$ estimado (0.04) por 100 (aumento de 100 en la cantidad de contagios). De manera que:
+
+  $DeathPer1m=(0.04CasesPer1m)*0.0001$
+
+  $DeathPer1m =(0.04*100)*0.0001$
+  
+  $DeathPer1m = 0.0004*1.000.000$
+  
+  $DeathPer1m = 400$
+
+### 4) **¿Existen diferencias en la tasa de fatalidad entre países con un alto porcentaje de población vieja?¿A qué se debe dicha diferencia?**
+
+Para iniciar, veamos algunos países que tengan alto porcentaje de su población que sea mayor a 65 años con su respectiva tasa de fatalidad.
+
+```{sql connection=con}
+SELECT Country, `Population 65 and above` AS Population65, `Death per 1 million` AS DeathPer1m, MAX(Week) AS FinalWeek, DATE(`First Death`) AS FirstDeath
+FROM econometria.covid
+GROUP BY Country
+ORDER BY Population65 DESC
+LIMIT 10
+```
+
+Como puede ser evidenciado en la Tabla 14, se escogieron los países con el mayor porcentaje de población de adultos con 65 o más años y se organizaron con orden un descendente en la segunda columna, junto a una columna con sus respectivas tasas de mortalidad. Se pensaría según la teoría y con cierta especulación que habría una clara relación entre el porcentaje de población de adultos con 65 o más años y la tasa de mortalidad, esto porque en principio se pensaría que éstos no poseen ya las mismas defensas en su cuerpo que una persona de menos edad, con lo cual, se esperaría que esta población incidiera de una manera más significativa o directa con la tasa de mortalidad. Sin embargo los datos estadísticos encontrados no especifican esta relación y por el contrario, parece que no existiera ninguna relación si se analizan estos países con mayor porcentaje de este tipo de población según los datos proporcionados. Además, la información proporcionada por estos datos son respaldados con los resultados arrojados por el coeficiente de correlación de Pearson que anteriormente fue presentado, donde si bien existe una correlación, no es un valor tan grande como se esperaría (0.28). 
+
+Luego de múltiples ideas abordadas en el grupo de trabajo, se llegó a la conclusión que esta variable del porcentaje de población de adultos con 65 o más años no es más incidente en la tasa de mortalidad porque depende de manera simultánea de si ésta población de adultos mayores sufría antes de alguna enfermedad o si por el contrario se encontraba totalmente sano y con las defensas suficientes para combatir de manera efectiva el virus COVID-19. 
+
+Por último, y con respecto a los siguientes puntos a abordar, las tablas 14, 15 y 16 fueron realizadas con ayuda del lenguaje SQL para una mayor facilidad, visualización y tratamiento de consulta.
+
+
+### 5) **¿La incidencia de la tasa de contagio sobre la tasa de fatalidad depende del porcentaje de población mayor a 65 años?**
+
+Podemos tener una aproximación con los anteriores resultados, utilizando aquellos países con el mayor porcentaje de población mayor a 65 años  observando ahora la tasa de contagios asociada a ellos. Esto con el fin de tener una aproximación a la hipótesis que se busca sostener viendo si los datos la respaldan. Para que se encuentre dicho respaldo en los datos, se esperaría que en aquellos países donde la cantidad de contagios es mayor y a su vez, el porcentaje de la población mayor a 65 años es mayor, también se encontraría mayor cantidad de muertes por el virus. La preposición lógica se podría expresar así:
+
+  $Si~(\uparrow CasesPer1m~~~y~~~\uparrow Population65)\longrightarrow~~\uparrow DeathPer1m$
+
+```{sql connection=con}
+SELECT Country, `Population 65 and above` AS Population65, `Cases per 1 million` AS CasesPer1m, `Death per 1 million` AS DeathPer1m
+FROM econometria.covid
+GROUP BY Country
+ORDER BY CasesPer1m DESC
+LIMIT 10
+```
+
+En los datos de la **_Tabla 15_** es notable que dicha condicional se viola. Pues, por ejemplo, Estonia, el país muestreado con mayor cantidad de contagios por cada millon de personas, con 19.6% de su población mayor a 65 años; tiene **menor** cantidad de muertes por millón de personas frente a Bélgica, quien tiene menos cantidad de contagios que Estonia (29% menos), menor porcentaje de su población mayor a 65 años (0.8% menos) **pero** su cantidad de muertes por coronavirus es mayor a la de Estonia, una diferencia mayor al 100% de hecho. Así se podrían revisar algunos contraejemplos más, pero ciertamente con uno basta para derrumbar la hipótesis.
+
+Finalmente, solo por mencionar otra manera posible de revisar dicha relación podría hacerse mediante la estimación bajo el método de Variables Instrumentales donde:
+
+  $DeathPer1m=\beta_0+\beta_1CasesPer1m+u$
+  
+  Y además:
+  
+  $CasesPer1m=\Gamma_0+\Gamma_1Population65+v$
+
+### 6) **Comparación basada en el porcentaje de población mayor a 65 años (15% vs. 25%)**
+
+Para revisar la estimación podemos emplear el modelo seleccionado en el primer punto (MCOC) considerando un cambio en los estimadores solicitados manteniendo todo lo demás constante, de manera que:
+
+  + **Poblation65 = 15%**
+
+  $DeathPer1m=0.04CasesPer1m+0.187Population65$
+  
+  $DeathPer1m=(0.04*1)+(0.187*15)$
+  
+  $DeathPer1m=0.04+2805=112.2$
+  
+De manera que, en un país con 15% de su población mayor a 65 años, al aumentar en 1 caso de contagio por cada millon de habitantes, se estima que aumentará 112.2 la cantidad de muertes por cada millón de habitantes.
+
+  + **Poblation65 = 25%**
+  
+  $DeathPer1m=0.04CasesPer1m+0.187Population65$
+  
+  $DeathPer1m=(0.04*1)+(0.187*25)$
+  
+  $DeathPer1m=0.04+4675=187$
+  
+De manera que, en un país con 25% de su población mayor a 65 años, al aumentar en 1 caso de contagio por cada millon de habitantes, se estima que aumentará 187 la cantidad de muertes por cada millón de habitantes. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
